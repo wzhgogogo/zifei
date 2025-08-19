@@ -432,7 +432,7 @@ class BinanceExchange {
                 }
             }
 
-            logger.fundingSummary('binance', null, 'Funding rate fetch completed', {
+            logger.fundingSummary('binance', 'Funding rate fetch completed', {
                 successCount,
                 errorCount,
                 totalSymbols: Object.keys(this.fundingMap).length,

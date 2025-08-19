@@ -486,15 +486,6 @@ app.listen(config.server.port, async () => {
         
         logger.success('All exchanges initialized successfully');
         
-        // 启动Binance WebSocket连接
-        try {
-            await binanceExchange.connectWebSocket();
-            logger.success('Binance WebSocket connected successfully');
-        } catch (error) {
-            logger.error('Failed to connect Binance WebSocket', error);
-            // 继续运行，但会使用空的ticker数据
-        }
-        
         // 立即获取一次资金费率
         await Promise.all([
             binanceExchange.fetchFundingInfo(),
