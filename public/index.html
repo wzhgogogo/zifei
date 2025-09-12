@@ -305,6 +305,21 @@
                 <label>搜索代币:</label>
                 <input type="text" id="searchToken" placeholder="输入代币符号">
             </div>
+            <!-- 新增：排序字段与排序顺序 -->
+            <div class="control-group">
+                <label>排序字段:</label>
+                <select id="sortFieldSelect">
+                    <option value="price" selected>价差</option>
+                    <option value="funding">费率差</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>排序顺序:</label>
+                <select id="sortOrderSelect">
+                    <option value="desc" selected>从大到小</option>
+                    <option value="asc">从小到大</option>
+                </select>
+            </div>
         </div>
 
         <div class="stats">
@@ -332,6 +347,9 @@
             constructor() {
                 this.data = [];
                 this.filteredData = [];
+                // 新增：排序状态（默认按价差从大到小）
+                this.sortField = 'price';
+                this.sortOrder = 'desc';
                 this.init();
             }
 
@@ -342,8 +360,23 @@
 
             bindEvents() {
                 document.getElementById('searchToken').addEventListener('input', () => this.filterData());
+                // 新增：绑定排序控件事件
+                const sortFieldEl = document.getElementById('sortFieldSelect');
+                const sortOrderEl = document.getElementById('sortOrderSelect');
+                if (sortFieldEl) {
+                    sortFieldEl.addEventListener('change', (e) => {
+                        this.sortField = e.target.value; // 'price' | 'funding'
+                        this.render();
+                    });
+                }
+                if (sortOrderEl) {
+                    sortOrderEl.addEventListener('change', (e) => {
+                        this.sortOrder = e.target.value; // 'desc' | 'asc'
+                        this.render();
+                    });
+                }
             }
-
+            
             async fetchData() {
                 try {
                     console.log('正在获取数据...');
@@ -377,22 +410,30 @@
                 this.render();
             }
 
+            // 动态格式化价格：≥100 保留2位；<100 保留4位；并带千分位
+            formatPrice(value) {
+                const n = Number(value);
+                if (!Number.isFinite(n)) return 'N/A';
+                const decimals = n >= 100 ? 2 : 4;
+                return n.toLocaleString('zh-CN', {
+                    minimumFractionDigits: decimals,
+                    maximumFractionDigits: decimals,
+                });
+            }
+
             renderTokenCard(token) {
                 const exchanges = Object.entries(token.exchanges || {});
-                const prices = exchanges.map(([_, data]) => data.price);
-                const maxPrice = Math.max(...prices);
-                const minPrice = Math.min(...prices);
-                const spread = ((maxPrice - minPrice) / minPrice * 100).toFixed(2);
-            
+                // 使用统一计算
+                const spread = this.getPriceSpread(token).toFixed(2);
+                const fundingSpread = this.getFundingSpread(token).toFixed(3);
+
                 // 计算最近的费率更新时间
                 const now = Date.now();
                 const nextFundingTimes = exchanges
                     .filter(([_, data]) => data.nextFundingTime && data.nextFundingTime > now)
                     .map(([_, data]) => data.nextFundingTime);
-                
-                const nearestUpdate = nextFundingTimes.length > 0 ? 
-                    Math.min(...nextFundingTimes) : null;
 
+                const nearestUpdate = nextFundingTimes.length > 0 ? Math.min(...nextFundingTimes) : null;
                 const nextUpdateText = nearestUpdate ? 
                     `下次费率更新: ${new Date(nearestUpdate).toLocaleString('zh-CN', {
                         month: '2-digit',
@@ -400,12 +441,13 @@
                         hour: '2-digit',
                         minute: '2-digit'
                     })}` : '';
-            
+
                 return `
                     <div class="token-card">
                         <div class="token-header">
                             <div class="token-symbol">${token.symbol}</div>
                             <div class="price-spread">价差: ${spread}%</div>
+                            <div class="price-spread">费率差: ${fundingSpread}%</div>
                         </div>
                         
                         ${nextUpdateText ? `<div class="next-update-info">${nextUpdateText}</div>` : ''}
@@ -414,7 +456,7 @@
                             ${exchanges.map(([exchange, data]) => `
                                 <div class="exchange-row">
                                     <div class="exchange-name">${exchange}</div>
-                                    <div class="price">${data.price.toLocaleString()}</div>
+                                    <div class="price">${this.formatPrice(data.price)}</div>
                                     <div class="type-badge">${data.type}</div>
                                     <div class="funding-rate ${data.fundingRate >= 0 ? 'funding-positive' : 'funding-negative'}">
                                         ${(data.fundingRate * 100).toFixed(3)}%
@@ -432,7 +474,7 @@
                                 </div>
                             `).join('')}
                         </div>
-            
+
                         <div class="trading-advice">
                             <div class="advice-title">交易建议</div>
                             <div class="advice-grid">
@@ -460,18 +502,11 @@
                     return;
                 }
 
-                // 按价差排序
+                // 新增：按照“排序字段 + 顺序”进行全量排序
                 this.filteredData.sort((a, b) => {
-                    const aExchanges = Object.values(a.exchanges || {});
-                    const bExchanges = Object.values(b.exchanges || {});
-                    
-                    const aPrices = aExchanges.map(e => e.price);
-                    const bPrices = bExchanges.map(e => e.price);
-                    
-                    const aSpread = ((Math.max(...aPrices) - Math.min(...aPrices)) / Math.min(...aPrices)) * 100;
-                    const bSpread = ((Math.max(...bPrices) - Math.min(...bPrices)) / Math.min(...bPrices)) * 100;
-                    
-                    return bSpread - aSpread;
+                    const va = this.sortField === 'funding' ? this.getFundingSpread(a) : this.getPriceSpread(a);
+                    const vb = this.sortField === 'funding' ? this.getFundingSpread(b) : this.getPriceSpread(b);
+                    return this.sortOrder === 'asc' ? (va - vb) : (vb - va);
                 });
 
                 app.innerHTML = `
@@ -483,6 +518,32 @@
                 // 更新统计
                 document.getElementById('totalTokens').textContent = this.filteredData.length;
                 document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString('zh-CN');
+            }
+
+            // 统一计算价差（百分比，number）
+            getPriceSpread(token) {
+                const exchanges = Object.values(token.exchanges || {});
+                const prices = exchanges
+                    .map(e => Number(e.price))
+                    .filter(v => Number.isFinite(v) && v > 0);
+                if (prices.length < 2) return 0;
+                const maxPrice = Math.max(...prices);
+                const minPrice = Math.min(...prices);
+                if (!Number.isFinite(maxPrice) || !Number.isFinite(minPrice) || minPrice <= 0) return 0;
+                return ((maxPrice - minPrice) / minPrice) * 100;
+            }
+
+            // 统一计算费率差（百分比点，number）
+            getFundingSpread(token) {
+                const exchanges = Object.values(token.exchanges || {});
+                const frs = exchanges
+                    .map(e => Number(e.fundingRate))
+                    .filter(v => Number.isFinite(v));
+                if (frs.length < 2) return 0;
+                const maxFR = Math.max(...frs);
+                const minFR = Math.min(...frs);
+                if (!Number.isFinite(maxFR) || !Number.isFinite(minFR)) return 0;
+                return (maxFR - minFR) * 100;
             }
 
             startPolling() {

@@ -103,11 +103,44 @@ class Logger {
                     .join(', ');
                 stats.push(`[${exchangeCounts}]`);
             }
+        // 新增：把成功/失败/跳过 totals 打到控制台
+        if (data.totals) {
+            const t = data.totals.tickers || {};
+            const f = data.totals.funding || {};
+            stats.push(`tickers 成功:${t.success || 0} 失败:${t.errors || 0} 跳过:${t.skipped || 0}`);
+            stats.push(`funding 成功:${f.success || 0} 失败:${f.errors || 0} 跳过:${f.skipped || 0}`);
+        }
+        
             if (stats.length > 0) {
                 consoleMessage += ` (${stats.join(', ')})`;
             }
+        // 新增：对 periodicSummary 的控制台明细输出
+        } else if (data && data.category === 'periodicSummary') {
+            const parts = [];
+            // 如果是“Totals”类日志，输出区间统计
+            if (
+                Number.isFinite(data.total) ||
+                Number.isFinite(data.success) ||
+                Number.isFinite(data.errors) ||
+                Number.isFinite(data.skipped)
+            ) {
+                if (Number.isFinite(data.total)) parts.push(`total:${data.total}`);
+                if (Number.isFinite(data.success)) parts.push(`${data.success}success`);
+                if (Number.isFinite(data.errors)) parts.push(`${data.errors}errors`);
+                if (Number.isFinite(data.skipped)) parts.push(`${data.skipped}skipped`);
+            }
+            // 如果是“各交易所累计明细”类日志，拼接展示
+            const exKeys = ['okx', 'bybit', 'binance', 'backpack', 'edgex', 'hyperliquid'];
+            const exStats = exKeys
+                .filter(k => typeof data[k] === 'string' && data[k].length > 0)
+                .map(k => `${k.toUpperCase()}:${data[k]}`);
+            if (parts.length > 0) {
+                consoleMessage += ` (${parts.join(', ')})`;
+            }
+            if (exStats.length > 0) {
+                consoleMessage += ` [${exStats.join(' | ')}]`;
+            }
         }
-        
         // 修复：只输出消息，不输出data对象
         if (level === 'error') {
             console.error(consoleMessage);

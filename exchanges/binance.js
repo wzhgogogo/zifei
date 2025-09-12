@@ -35,25 +35,33 @@ class BinanceExchange {
                 httpsAgent: this.proxyAgent
             });
 
-            // 构建市场映射
+            // 构建市场映射（仅保留 USDT 永续 PERPETUAL）
             this.markets = {};
+            let total = 0;
+            let kept = 0;
             for (const symbol of exchangeInfo.data.symbols) {
-                if (symbol.status === 'TRADING') {
+                total++;
+                if (
+                    symbol.status === 'TRADING' &&
+                    symbol.contractType === 'PERPETUAL' &&   // 只要永续
+                    symbol.quoteAsset === 'USDT'            // 只要 USDT 本位
+                ) {
                     const ccxtSymbol = symbol.symbol.replace('USDT', '/USDT:USDT');
                     this.markets[ccxtSymbol] = {
                         id: symbol.symbol,
                         symbol: ccxtSymbol,
                         base: symbol.baseAsset,
                         quote: symbol.quoteAsset,
-                        active: symbol.status === 'TRADING'
+                        active: true
                     };
+                    kept++;
                 }
             }
 
             // 启动WebSocket连接
             await this.connectWebSocket();
 
-            logger.exchangeInit('binance', true, `Exchange initialized successfully with ${Object.keys(this.markets).length} active symbols`);
+            logger.exchangeInit('binance', true, `Exchange initialized successfully with ${Object.keys(this.markets).length} active PERPETUAL USDT symbols (kept ${kept}/${total})`);
         } catch (error) {
             logger.exchangeError('binance', false, 'initialization', 'Failed to initialize exchange', error);
             throw error;
@@ -71,10 +79,10 @@ class BinanceExchange {
 
             // 优化连接选项
             const wsOptions = {
-                //agent: this.proxyAgent,
-                handshakeTimeout: 30000,  // 30秒握手超时
-                perMessageDeflate: false, // 禁用压缩以减少CPU负载
-                maxPayload: 100 * 1024 * 1024, // 100MB最大负载
+                agent: this.proxyAgent, // 关键：让 WS 也走代理（当 NO_PROXY==='true' 时 getProxyAgent 会返回 null）
+                handshakeTimeout: 30000,
+                perMessageDeflate: false,
+                maxPayload: 100 * 1024 * 1024,
                 followRedirects: true,
                 maxRedirects: 3,
                 headers: {
@@ -386,7 +394,8 @@ class BinanceExchange {
 
     async fetchFundingInfo() {
         try {
-            logger.fundingInfo('binance', null, 'Starting funding rate fetch');
+            // 修正：第二个参数是 message
+            logger.fundingInfo('binance', 'Starting funding rate fetch');
 
             // 获取资金费率数据
             const fundingResponse = await axios.get('https://fapi.binance.com/fapi/v1/premiumIndex', {
@@ -420,7 +429,8 @@ class BinanceExchange {
                     successCount++;
 
                     if (config.logging.enableDetailedFunding) {
-                        logger.fundingSuccess('binance', null, `${item.symbol} -> ${symbol}`, {
+                        // 修正：第二个参数是 message，第三个是 data
+                        logger.fundingSuccess('binance', `${item.symbol} -> ${symbol}`, {
                             fundingRate: item.lastFundingRate,
                             nextFundingTime: item.nextFundingTime,
                             fundingInterval
@@ -428,7 +438,8 @@ class BinanceExchange {
                     }
                 } catch (itemError) {
                     errorCount++;
-                    logger.fundingError('binance', null, `Failed to process funding data for ${item.symbol}`, itemError);
+                    // 修正：第二个参数是 message，第三个是 error
+                    logger.fundingError('binance', `Failed to process funding data for ${item.symbol}`, itemError);
                 }
             }
 
@@ -440,7 +451,8 @@ class BinanceExchange {
             });
 
         } catch (error) {
-            logger.fundingError('binance', null, 'Error fetching funding rates', error);
+            // 修正：第二个参数是 message，第三个是 error
+            logger.fundingError('binance', 'Error fetching funding rates', error);
         }
     }
 

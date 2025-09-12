@@ -33,14 +33,30 @@ const config = {
             fetchInterval: 60000,
             retryAttempts: 3,
             timeout: 10000
+        },
+        // 新增：Edgex
+        edgex: {
+            enabled: true,
+            fetchInterval: Number(process.env.EDGEX_FETCH_INTERVAL || 60000),
+            retryAttempts: 3,
+            timeout: 15000,
+            baseUrl: process.env.EDGEX_BASE_URL || 'https://pro.edgex.exchange'
+        },
+        // 新增：Hyperliquid
+        hyperliquid: {
+            enabled: true,
+            fetchInterval: Number(process.env.HYPERLIQUID_FETCH_INTERVAL || 60000),
+            retryAttempts: 3,
+            timeout: 15000,
+            baseUrl: process.env.HYPERLIQUID_BASE_URL || 'https://api.hyperliquid.xyz'
         }
     },
 
     // 套利配置
     arbitrage: {
         updateInterval: 5000,
-        minProfitThreshold: 0.3, // 价差套利最小阈值 0.1%
-        minFundingThreshold: 0.3, // 费率差套利最小阈值 0.05%
+        minProfitThreshold: 0.5, // 价差套利最小阈值 
+        minFundingThreshold: 0.5, // 费率差套利最小阈值 
         maxSpread: 10,
         enabledPairs: ['BTC/USDT', 'ETH/USDT', 'BNB/USDT']
     },
@@ -55,8 +71,8 @@ const config = {
         // 新增的详细程度控制
         enableDetailedFunding: process.env.ENABLE_DETAILED_FUNDING === 'true' || false, // 是否显示详细的资金费率日志
         enableTickerLogs: process.env.ENABLE_TICKER_LOGS === 'true' || false, // 是否显示价格数据日志
-        enablePerformanceLogs: process.env.ENABLE_PERFORMANCE_LOGS === 'false' || true, // 是否显示性能日志
-        enableWebSocketLogs: process.env.ENABLE_WEBSOCKET_LOGS === 'true' || true // 是否显示WebSocket日志
+        enablePerformanceLogs: process.env.ENABLE_PERFORMANCE_LOGS !== 'false', // 是否显示性能日志
+        enableWebSocketLogs: process.env.ENABLE_WEBSOCKET_LOGS !== 'false' // 是否显示WebSocket日志
     },
 
     // 代理配置

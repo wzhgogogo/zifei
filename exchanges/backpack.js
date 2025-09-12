@@ -250,7 +250,7 @@ class BackpackExchange {
         }
     }
 
-    async fetchFundingInfo() {
+    async fetchFundingInfo(symbols) {
         try {
             // 删除有问题的CCXT逻辑，直接使用HTTP API实现
 
@@ -262,11 +262,13 @@ class BackpackExchange {
             logger.fundingInfo('backpack', `Starting funding rate fetch for ${futureMarkets.length} PERP markets`);
 
             if (futureMarkets.length === 0) {
-                logger.fundingWarn('backpack', 'No PERP markets found, skipping funding rate update');
+                // 修正参数：fundingWarn 只有 (message, data)
+                logger.fundingWarn('[backpack] No PERP markets found, skipping funding rate update');
                 return;
             }
 
-            this.fundingMap = {};
+            // 原来这里是：this.fundingMap = {};
+            const newFundingMap = {};
             let successCount = 0;
             let errorCount = 0;
 
@@ -315,21 +317,98 @@ class BackpackExchange {
 
                             if (latestFunding.fundingRate !== undefined) {
                                 const unifiedSymbol = this.convertSymbolToUnified(symbol);
-                                this.fundingMap[unifiedSymbol] = {
+
+                                // 统一的时间解析：支持 ms、s、数字字符串、ISO 字符串（无时区默认按 UTC 处理）
+                                function parseFlexibleTimeToMs(value) {
+                                    if (value == null) return null;
+                                    if (typeof value === 'number') {
+                                        return value > 1e12 ? value : Math.round(value * 1000);
+                                    }
+                                    if (typeof value === 'string') {
+                                        const trimmed = value.trim();
+                                        if (/^\d+(\.\d+)?$/.test(trimmed)) {
+                                            const num = Number(trimmed);
+                                            return num > 1e12 ? num : Math.round(num * 1000);
+                                        }
+                                        // 处理 ISO 字符串：无时区信息时按 UTC 解析
+                                        const hasTZ = /[zZ]|[+-]\d{2}:?\d{2}$/.test(trimmed);
+                                        const iso = hasTZ ? trimmed : `${trimmed}Z`;
+                                        const t = Date.parse(iso);
+                                        return Number.isNaN(t) ? null : t;
+                                    }
+                                    return null;
+                                }
+
+                                const intervalHours = Number(latestFunding.fundingIntervalHours) || 8;
+                                const intervalMs = intervalHours * 60 * 60 * 1000;
+
+                                const nfCandidates = [
+                                    latestFunding.nextFundingTime,
+                                    latestFunding.nextFundingAt,
+                                    latestFunding.nextFundingTimestamp,
+                                    latestFunding.nextFunding,
+                                    latestFunding.nextFundingTs,
+                                    latestFunding.nextFundingTimeMs,
+                                    latestFunding.nextFundingTimeSec,
+                                    // 新增：Backpack 返回的区间结束时间字段，作为 nextFundingTime 的候选
+                                    latestFunding.intervalEndTimestamp,
+                                    latestFunding.intervalEnd,
+                                    latestFunding.endTimestamp,
+                                    latestFunding.endTime
+                                ];
+                                const ftCandidates = [
+                                    latestFunding.fundingTime,
+                                    latestFunding.fundingTimestamp,
+                                    latestFunding.fundingAt,
+                                    latestFunding.timestamp,
+                                    latestFunding.time,
+                                    latestFunding.ts,
+                                    latestFunding.createdAt,
+                                    latestFunding.updatedAt
+                                ];
+
+                                const firstNonNull = (arr) => arr.find(v => v != null);
+                                // 修复：使用已定义的解析函数，替换 normalizeToMs
+                                const nfMs = parseFlexibleTimeToMs(firstNonNull(nfCandidates));
+                                const ftMs = parseFlexibleTimeToMs(firstNonNull(ftCandidates));
+
+                                let nextFundingTimeMs = null;
+                                if (nfMs != null) {
+                                    nextFundingTimeMs = nfMs;
+                                } else if (ftMs != null) {
+                                    nextFundingTimeMs = ftMs + intervalMs;
+                                } else {
+                                    if (config.logging.enableDetailedFunding) {
+                                        // 修正参数：message 放第一位，并明确可用键
+                                        logger.fundingWarn(`[backpack] No parsable funding time for ${symbol}`, {
+                                            availableKeys: Object.keys(latestFunding),
+                                            candidates: {
+                                                nextFunding: nfCandidates,
+                                                fundingTime: ftCandidates
+                                            }
+                                        });
+                                    }
+                                }
+
+                                // 将结果写入临时 map，避免本轮失败清空历史数据
+                                newFundingMap[unifiedSymbol] = {
                                     fundingRate: parseFloat(latestFunding.fundingRate),
-                                    fundingTime: parseInt(latestFunding.fundingTime || latestFunding.nextFundingTime || Date.now()),
-                                    fundingInterval: 8
+                                    fundingTime: nextFundingTimeMs,
+                                    nextFundingTime: nextFundingTimeMs,
+                                    fundingInterval: intervalHours
                                 };
                                 successCount++;
 
                                 if (config.logging.enableDetailedFunding) {
-                                    logger.fundingSuccess('backpack', null, `${symbol} -> ${unifiedSymbol}`, {
-                                        fundingRate: latestFunding.fundingRate
+                                    // 修正参数：fundingSuccess(exchange, message, data)
+                                    logger.fundingSuccess('backpack', `${symbol} -> ${unifiedSymbol}`, {
+                                        fundingRate: latestFunding.fundingRate,
+                                        nextFundingTimeMs
                                     });
                                 }
                             } else {
-                                errorCount++;
-                                logger.fundingError('backpack', `No fundingRate field for ${symbol}`, {
+                                // 用 exchangeWarn 记录缺字段，并带 data
+                                logger.exchangeWarn('backpack', 'FUNDING', `No fundingRate field for ${symbol}`, {
                                     availableFields: Object.keys(latestFunding)
                                 });
                             }
@@ -352,6 +431,11 @@ class BackpackExchange {
                     }
                 }
             }));
+
+            // 只有本轮有成功才替换，避免把上一轮成功数据清空
+            if (successCount > 0) {
+                this.fundingMap = newFundingMap;
+            }
 
             logger.fundingSummary('backpack', 'Funding rate fetch completed', {
                 successCount,
