@@ -3,7 +3,7 @@ const { getProxyAgent } = require('../utils/proxy');
 const logger = require('../utils/logger');
 const config = require('../config/config');
 
-class EdgexExchange {
+class EdgexExchangeOld {
     constructor() {
         this.name = 'Edgex';
         this.proxyAgent = getProxyAgent();

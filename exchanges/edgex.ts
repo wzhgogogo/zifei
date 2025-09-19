@@ -7,100 +7,102 @@ import WebSocket from 'ws'
 
 
 interface ContractInfo {
-  id: string;                 // 合约ID
-  name: string;               // 合约名称，例如 BTCUSDT
-  symbol: string;             // 交易对符号，例如 BTC/USDT:USDT
-  base: string;               // 基础币种，例如 BTC
-  quote: string;              // 计价币种，例如 USDT
-  tickSize: number;           // 价格最小变动单位
-  stepSize: number;           // 数量最小变动单位
-  minOrderSize: number;       // 最小下单量
-  maxOrderSize: number;       // 最大下单量
-  maxPositionSize?: number;   // 最大持仓量，可选
-  defaultMakerFeeRate?: number; // 默认maker手续费率，可选
-  defaultTakerFeeRate?: number; // 默认taker手续费率，可选
-  fundingRateIntervalMin?: number; // Funding费率间隔分钟，可选
+    id: string;                 // 合约ID
+    name: string;               // 合约名称，例如 BTCUSDT
+    symbol: string;             // 交易对符号，例如 BTC/USDT:USDT
+    base: string;               // 基础币种，例如 BTC
+    quote: string;              // 计价币种，例如 USDT
+    tickSize: number;           // 价格最小变动单位
+    stepSize: number;           // 数量最小变动单位
+    minOrderSize: number;       // 最小下单量
+    maxOrderSize: number;       // 最大下单量
+    maxPositionSize?: number;   // 最大持仓量，可选
+    defaultMakerFeeRate?: number; // 默认maker手续费率，可选
+    defaultTakerFeeRate?: number; // 默认taker手续费率，可选
+    fundingRateIntervalMin?: number; // Funding费率间隔分钟，可选
 }
 
 
 interface FundingInfo {
-  symbol: string;
-  fundingRate: number | null;
-  fundingTime: number | null;
-  forecastFundingRate?: number | null;
-  fundingRateIntervalMin?: number | null;
+    symbol: string;
+    fundingRate: number | null;
+    fundingTime: number | null;
+    forecastFundingRate?: number | null;
+    fundingRateIntervalMin?: number | null;
 }
 
 
 interface TickerInfo {
-  contractId?: string;
-  symbol: string;
-  lastPrice: number | null;
-  high: number | null;
-  low: number | null;
-  open: number | null;
-  close: number | null;
-  priceChange: number | null;
-  priceChangePercent: number | null;
-  trades: number | null;
-  size: number | null;
-  value: number | null;
-  highTime: number | null;
-  lowTime: number | null;
-  startTime: number | null;
-  endTime: number | null;
-  bidPrice?: number | null;
-  bidSize?: number | null;
-  askPrice?: number | null;
-  askSize?: number | null;
-  spread?: number | null;
-  timestamp?: number;
-  bid: [number,number][];
-  ask: [number,number][];
-  info?: Record<string, any>; // 保留兜底
+    contractId?: string;
+    symbol: string;
+    lastPrice: number | null;
+    high: number | null;
+    low: number | null;
+    open: number | null;
+    close: number | null;
+    priceChange: number | null;
+    priceChangePercent: number | null;
+    trades: number | null;
+    size: number | null;
+    value: number | null;
+    highTime: number | null;
+    lowTime: number | null;
+    startTime: number | null;
+    endTime: number | null;
+    bidPrice?: number | null;
+    bidSize?: number | null;
+    askPrice?: number | null;
+    askSize?: number | null;
+    spread?: number | null;
+    timestamp?: number;
+    bid: [number, number][];
+    ask: [number, number][];
+    info?: Record<string, any>; // 保留兜底
 }
 
 
 export class EdgexExchange {
-  name: string;
-  proxyAgent: any;
-  baseUrl: string;
+    name: string;
+    proxyAgent: any;
+    baseUrl: string;
 
-  contracts: Record<string, ContractInfo> = {};
-  contractIdToSymbol: Record<string, string> = {};
-  symbolToContractId: Record<string, string> = {};
-  tickersMap: Record<string, TickerInfo> = {};
-  fundingMap: Record<string, FundingInfo> = {};
+    contracts: Record<string, ContractInfo> = {};
+    contractIdToSymbol: Record<string, string> = {};
+    symbolToContractId: Record<string, string> = {};
+    tickersMap: Record<string, TickerInfo> = {};
+    fundingMap: Record<string, FundingInfo> = {};
 
-  batchSize: number;
-  batchPauseMs: number;
-  maxRetries: number;
-  requestTimeout: number;
-  quoteCoinName: string;
-  treatUsdAsUsdt: boolean;
-  includeByNameSuffix: boolean;
+    batchSize: number;
+    batchPauseMs: number;
+    maxRetries: number;
+    requestTimeout: number;
+    quoteCoinName: string;
+    treatUsdAsUsdt: boolean;
+    includeByNameSuffix: boolean;
 
-  ws?: WebSocket;
+    ws?: WebSocket;
 
-  constructor() {
-    this.name = 'Edgex';
-    this.proxyAgent = getProxyAgent();
-    this.baseUrl = process.env.EDGEX_BASE_URL || 'https://pro.edgex.exchange';
-    this.batchSize = Number(process.env.EDGEX_BATCH_SIZE || 10);
-    this.batchPauseMs = Number(process.env.EDGEX_BATCH_PAUSE_MS || 200);
-    this.maxRetries = Number(process.env.EDGEX_RETRIES || 2);
-    this.requestTimeout = Number(process.env.EDGEX_TIMEOUT_MS || 15000);
-    this.quoteCoinName = process.env.EDGEX_QUOTE || 'USDT';
-    this.treatUsdAsUsdt = (process.env.EDGEX_TREAT_USD_AS_USDT || 'true').toLowerCase() === 'true';
-    this.includeByNameSuffix = (process.env.EDGEX_INCLUDE_BY_NAME_SUFFIX || 'true').toLowerCase() === 'true';
-  }
+    constructor() {
+        this.name = 'Edgex';
+        this.proxyAgent = getProxyAgent();
+        this.baseUrl = process.env.EDGEX_BASE_URL || 'https://pro.edgex.exchange';
+        this.batchSize = Number(process.env.EDGEX_BATCH_SIZE || 10);
+        this.batchPauseMs = Number(process.env.EDGEX_BATCH_PAUSE_MS || 200);
+        this.maxRetries = Number(process.env.EDGEX_RETRIES || 2);
+        this.requestTimeout = Number(process.env.EDGEX_TIMEOUT_MS || 15000);
+        this.quoteCoinName = process.env.EDGEX_QUOTE || 'USDT';
+        this.treatUsdAsUsdt = (process.env.EDGEX_TREAT_USD_AS_USDT || 'true').toLowerCase() === 'true';
+        this.includeByNameSuffix = (process.env.EDGEX_INCLUDE_BY_NAME_SUFFIX || 'true').toLowerCase() === 'true';
+    }
 
 
-    async initialize():Promise<void> {
+    async initialize(): Promise<void> {
         try {
             await this.loadMarkets();
+            this.fetchTickersAndDepths();
             logger.exchangeInit('edgex', true);
         } catch (e) {
+            // @ts-ignore
             logger.exchangeInit('edgex', false, e);
             throw e;
         }
@@ -128,7 +130,7 @@ export class EdgexExchange {
     }
 
 
-    async loadMarkets():Promise<void> {  
+    async loadMarkets(): Promise<void> {
         // GET /api/v1/public/meta/getMetaData -> contractList/coinList 等元数据
         const url = `${this.baseUrl}/api/v1/public/meta/getMetaData`;
 
@@ -148,12 +150,12 @@ export class EdgexExchange {
         const coinIdToSymbol: Record<string, string> = {};
         if (Array.isArray(data.coinList)) {
             for (const coin of data.coinList) {
-            // 先判断 contract 是否存在
+                // 先判断 contract 是否存在
                 if (coin && coin.coinId && coin.coinName) {
-                // 如果 coin 有 contracId 和 contractName，就存进去
-                const id = String(coin.coinId);   // 比如 "1001"
-                const code = coin.coinName; 
-                coinIdToSymbol[id] = code;
+                    // 如果 coin 有 contracId 和 contractName，就存进去
+                    const id = String(coin.coinId);   // 比如 "1001"
+                    const code = coin.coinName;
+                    coinIdToSymbol[id] = code;
                 }
             }
         }
@@ -184,18 +186,18 @@ export class EdgexExchange {
                 stepSize: Number(c.stepSize ?? 0),
                 minOrderSize: Number(c.minOrderSize ?? 0),
                 maxOrderSize: Number(c.maxOrderSize ?? 0),
-                maxPositionSize: c.maxPositionSize !=null ? Number(c.maxPositionSize) : undefined,
-                defaultMakerFeeRate: c.defaultMakerFeeRate !=null ? Number(c.defaultMakerFeeRate) : undefined,
-                defaultTakerFeeRate: c.defaultTakerFeeRate !=null ? Number(c.defaultTakerFeeRate) : undefined,
-                fundingRateIntervalMin: c.fundingRateIntervalMin !=null ? Number(c.fundingRateIntervalMin) : undefined,
+                maxPositionSize: c.maxPositionSize != null ? Number(c.maxPositionSize) : undefined,
+                defaultMakerFeeRate: c.defaultMakerFeeRate != null ? Number(c.defaultMakerFeeRate) : undefined,
+                defaultTakerFeeRate: c.defaultTakerFeeRate != null ? Number(c.defaultTakerFeeRate) : undefined,
+                fundingRateIntervalMin: c.fundingRateIntervalMin != null ? Number(c.fundingRateIntervalMin) : undefined,
             };
 
-                this.contracts[cInfo.id] = cInfo;
-                this.contractIdToSymbol[cInfo.id] = cInfo.symbol;
-                this.symbolToContractId[cInfo.symbol] = cInfo.id;
-            }
+            this.contracts[cInfo.id] = cInfo;
+            this.contractIdToSymbol[cInfo.id] = cInfo.symbol;
+            this.symbolToContractId[cInfo.symbol] = cInfo.id;
         }
-    
+    }
+
 
 
     // 简单 sleep
@@ -214,6 +216,7 @@ export class EdgexExchange {
                 const base = 300 * Math.pow(2, attempt); // 300, 600, 1200...
                 const jitter = Math.floor(Math.random() * 100);
                 const delay = base + jitter;
+                // @ts-ignore
                 logger.exchangeWarn('edgex', context || 'REQUEST', `retrying (attempt ${attempt + 1}) after ${delay}ms`, {
                     error: e.message
                 });
@@ -237,9 +240,9 @@ export class EdgexExchange {
 
 
     // 订阅全市场的 tickers+depth（使用 Public WebSocket API）
-    async fetchTickersAndDepths() : Promise<void>{
+    async fetchTickersAndDepths(): Promise<void> {
         return new Promise((resolve, reject) => {
-            this.ws = new WebSocket(`${this.baseUrl.replace('https', 'wss')}/api/v1/public/ws`, {
+            this.ws = new WebSocket(`wss://quote.edgex.exchange/api/v1/public/ws`, {
                 agent: this.proxyAgent,
             });
 
@@ -267,20 +270,20 @@ export class EdgexExchange {
                 const msg = JSON.parse(raw);
 
                 if (msg.type === 'ping') {
-                // 必须回复 pong，否则服务器会断开连接
-                if (this.ws) {
-                    this.ws.send(JSON.stringify({ type: 'pong', time: msg.time }));
-                }
-                return; // 直接返回，不继续往下走
+                    // 必须回复 pong，否则服务器会断开连接
+                    if (this.ws) {
+                        this.ws.send(JSON.stringify({ type: 'pong', time: msg.time }));
+                    }
+                    return; // 直接返回，不继续往下走
                 }
 
-                if (msg.type === 'payload' && msg.channel?.startsWith('ticker.')) {
+                if (msg.type === 'quote-event' && msg.channel?.startsWith('ticker.')) {
                     this.handleTickerUpdate(msg);
-                } else if (msg.type === 'payload' && msg.channel?.startsWith('depth.')) {
+                } else if (msg.type === 'quote-event' && msg.channel?.startsWith('depth.')) {
                     this.handleDepthUpdate(msg);
                 }
-            }); 
-
+            });
+            // @ts-ignore
             this.ws.on('error', (err) => {
                 console.error(`[${this.name}] WS error:`, err);
                 reject(err);
@@ -290,7 +293,7 @@ export class EdgexExchange {
                 console.log(`[${this.name}] WebSocket closed`);
             });
         });
-    }   
+    }
 
     private handleTickerUpdate(msg: any) {
         const dataArr = msg.content?.data;
@@ -300,7 +303,7 @@ export class EdgexExchange {
             const contractId = data.contractId;
             const symbol = this.contractIdToSymbol[contractId] || contractId;
             const lastPrice = parseFloat(data.lastPrice);
-
+            // @ts-ignore
             this.tickersMap[symbol] = {
                 ...(this.tickersMap[symbol] || {}),
                 contractId,
@@ -331,12 +334,13 @@ export class EdgexExchange {
 
             if (!this.tickersMap[symbol]) {
                 this.tickersMap[symbol] = {
+                    ...
                     contractId,
                     symbol,
                     lastPrice: NaN,
                     timestamp: Date.now(),
                 };
-            }   
+            }
 
             this.tickersMap[symbol] = {
                 ...this.tickersMap[symbol],
@@ -354,7 +358,7 @@ export class EdgexExchange {
     // 拉取资金费率（使用 Funding API 的 getLatestFundingRate）
     async fetchFundingInfo() {
         const url = `${this.baseUrl}/api/v1/public/funding/getLatestFundingRate`;
-        
+
         try {
             const resp = await this.requestWithRetry(() =>
                 axios.get<{ data: any[] }>(url, {
@@ -363,44 +367,45 @@ export class EdgexExchange {
                 }),
                 'FUNDING'
             );
-
+            // @ts-ignore
             const list = resp.data?.data;
             if (!Array.isArray(list)) {
                 throw new Error('Invalid funding data from Edgex');
-            }       
+            }
 
-        let updated = 0;
-        for (const item of list) {
-            if (!item?.contractId) continue;
+            let updated = 0;
+            for (const item of list) {
+                if (!item?.contractId) continue;
 
-            const contractId = String(item.contractId);
-            const symbol = this.contractIdToSymbol[contractId];
-            if (!symbol) continue;
+                const contractId = String(item.contractId);
+                const symbol = this.contractIdToSymbol[contractId];
+                if (!symbol) continue;
 
-            const fundingInfo: FundingInfo = {
-                symbol,
-                fundingRate: item.fundingRate != null ? Number(item.fundingRate) : null,
-                fundingTime: item.fundingTime != null ? Number(item.fundingTime) : null,
-                forecastFundingRate: item.forecastFundingRate != null ? Number(item.forecastFundingRate) : null,
-                fundingRateIntervalMin: item.fundingRateIntervalMin != null ? Number(item.fundingRateIntervalMin) : null,
-            };
+                const fundingInfo: FundingInfo = {
+                    symbol,
+                    fundingRate: item.fundingRate != null ? Number(item.fundingRate) : null,
+                    fundingTime: item.fundingTime != null ? Number(item.fundingTime) : null,
+                    forecastFundingRate: item.forecastFundingRate != null ? Number(item.forecastFundingRate) : null,
+                    fundingRateIntervalMin: item.fundingRateIntervalMin != null ? Number(item.fundingRateIntervalMin) : null,
+                };
 
-            this.fundingMap[symbol] = fundingInfo;
-            updated++;
+                this.fundingMap[symbol] = fundingInfo;
+                updated++;
+            }
+
+            if (config.logging.enableFundingLogs) {
+                logger.exchangeInfo(this.name, `Fetched ${updated} funding rates`);
+            }
+        } catch (e: any) {
+            // @ts-ignore
+            logger.exchangeError(this.name, 'FUNDING', 'fetchFundingRates failed', {
+                error: e.message,
+            });
+            throw e;
         }
-
-        if (config.logging.enableFundingLogs) {
-            logger.exchangeInfo(this.name, `Fetched ${updated} funding rates`);
-        }
-    } catch (e: any) {
-        logger.exchangeError(this.name, 'FUNDING', 'fetchFundingRates failed', {
-            error: e.message,
-        });
-        throw e;
     }
-}
 
-        
+
     getFundingMap() {
         return this.fundingMap;
     }

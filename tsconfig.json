@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",           // 目标 JS 版本
+    "module": "ESNext",           // 模块系统（或 "CommonJS" 取决于项目）
+    "outDir": "./dist",           // 编译输出目录
+    "strict": false,               // 启用严格类型检查
+    "esModuleInterop": true,      // 兼容 CommonJS 和 ES Module
+    "skipLibCheck": true          // 跳过库文件检查
+  },
+  "include": ["exchanges/*.ts"],        // 包含的 TS 文件路径
+  "exclude": ["node_modules"]     // 排除的路径
+}

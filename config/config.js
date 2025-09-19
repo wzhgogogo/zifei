@@ -72,7 +72,8 @@ const config = {
         enableDetailedFunding: process.env.ENABLE_DETAILED_FUNDING === 'true' || false, // 是否显示详细的资金费率日志
         enableTickerLogs: process.env.ENABLE_TICKER_LOGS === 'true' || false, // 是否显示价格数据日志
         enablePerformanceLogs: process.env.ENABLE_PERFORMANCE_LOGS !== 'false', // 是否显示性能日志
-        enableWebSocketLogs: process.env.ENABLE_WEBSOCKET_LOGS !== 'false' // 是否显示WebSocket日志
+        enableWebSocketLogs: process.env.ENABLE_WEBSOCKET_LOGS !== 'false', // 是否显示WebSocket日志
+        enableFundingLogs: process.env.ENABLE_FUNDING_LOGS === 'true' || false
     },
 
     // 代理配置

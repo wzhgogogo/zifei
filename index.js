@@ -69,7 +69,7 @@ const BinanceExchange = require('./exchanges/binance');
 const OKXExchange = require('./exchanges/okx');
 const BybitExchange = require('./exchanges/bybit');
 const BackpackExchange = require('./exchanges/backpack');
-const EdgexExchange = require('./exchanges/edgex'); // 新增
+const EdgexExchange = require('./dist/edgex');
 const HyperliquidExchange = require('./exchanges/hyperliquid'); // 新增
 
 // 初始化交易所实例
@@ -77,7 +77,7 @@ const binanceExchange = new BinanceExchange();
 const okxExchange = new OKXExchange();
 const bybitExchange = new BybitExchange();
 const backpackExchange = new BackpackExchange();
-const edgexExchange = new EdgexExchange(); // 新增
+const edgexExchange = new EdgexExchange.EdgexExchange(); // 新增
 const hyperliquidExchange = new HyperliquidExchange(); // 新增
 
 // 增加：聚合互斥锁，防止主循环重入
@@ -144,14 +144,15 @@ async function main() {
                 statsCounters.tickers.backpack.errors++;
                 throw err;
             }),
-            edgexExchange.fetchTickers().then(result => {
-                statsCounters.tickers.edgex.success++;
-                statsCounters.tickers.edgex.lastUpdate = new Date();
-                return result;
-            }).catch(err => {
-                statsCounters.tickers.edgex.errors++;
-                throw err;
-            }), // 新增
+            edgexExchange.tickersMap,
+            // edgexExchange.fetchTickers().then(result => {
+            //     statsCounters.tickers.edgex.success++;
+            //     statsCounters.tickers.edgex.lastUpdate = new Date();
+            //     return result;
+            // }).catch(err => {
+            //     statsCounters.tickers.edgex.errors++;
+            //     throw err;
+            // }), // 新增
             hyperliquidExchange.fetchTickers().then(result => {
                 statsCounters.tickers.hyperliquid.success++;
                 statsCounters.tickers.hyperliquid.lastUpdate = new Date();
