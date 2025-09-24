@@ -390,45 +390,37 @@ export default class EdgexExchange {
         }
 
         try {
+            const resp = await this.requestWithRetry(() =>
+                axios.get<{ data: any[] }>(url, {
+                    httpsAgent: this.proxyAgent,
+                    timeout: this.requestTimeout,
+                    params: { 
+                        contractId: ids.join(",")
+                        },   
+                }),
+                'FUNDING'
+            );
+
+
+            const list = resp.data?.data;
+            if (!Array.isArray(list) || list.length === 0) {
+                logger.exchangeInfo(this.name, `No funding data for contract ${ids.join(',')}`);
+                return;
+            }
+
             let updated = 0;
-
-            for (const contractId of ids) {   // 循环取 contractId
-                const resp = await this.requestWithRetry(() =>
-                    axios.get<{ data: any[] }>(url, {
-                        httpsAgent: this.proxyAgent,
-                        timeout: this.requestTimeout,
-                        params: { 
-                            contractId: ids.join(",")
-                         },   //  批量传递循环里的 contractId
-                    }),
-                    'FUNDING'
-                );
-
-
-                const list = resp.data?.data;
-                if (!Array.isArray(list) || list.length === 0) {
-                    logger.exchangeInfo(this.name, `No funding data for contract ${contractId}`);
-                    continue;
-                }
-
-                for (const item of list) {
-                    if (!item?.contractId) continue;
-
-                    const cid = String(item.contractId);
-                    const symbol = this.contractIdToSymbol[cid];
-                    if (!symbol) continue;
-
-                    const fundingInfo: FundingInfo = {
-                        symbol,
-                        fundingRate: item.fundingRate != null ? Number(item.fundingRate) : null,
-                        fundingTime: item.fundingTime != null ? Number(item.fundingTime) : null,
-                        forecastFundingRate: item.forecastFundingRate != null ? Number(item.forecastFundingRate) : null,
-                        fundingRateIntervalMin: item.fundingRateIntervalMin != null ? Number(item.fundingRateIntervalMin) : null,
-                    };
-
-                    this.fundingMap[symbol] = fundingInfo;
-                    updated++;
-                }
+            for (const item of list) {
+                const contractId = String(item.contractId);
+                const symbol = this.contractIdToSymbol[contractId] || contractId;
+                const fundingInfo: FundingInfo = {
+                    symbol,
+                    fundingRate: item.fundingRate != null ? Number(item.fundingRate) : null,
+                    fundingTime: item.fundingTime != null ? Number(item.fundingTime) : null,
+                    forecastFundingRate: item.forecastFundingRate != null ? Number(item.forecastFundingRate) : null,
+                    fundingRateIntervalMin: item.fundingRateIntervalMin != null ? Number(item.fundingRateIntervalMin) : null,
+                };
+                this.fundingMap[symbol] = fundingInfo;
+                updated++;
             }
 
             if (config.logging.enableFundingLogs) {
