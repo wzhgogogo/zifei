@@ -61,7 +61,7 @@ interface TickerInfo {
 }
 
 
-export class EdgexExchange {
+export default class EdgexExchange {
     name: string;
     proxyAgent: any;
     baseUrl: string;
@@ -239,61 +239,83 @@ export class EdgexExchange {
     }
 
 
-    // 订阅全市场的 tickers+depth（使用 Public WebSocket API）
+
     async fetchTickersAndDepths(): Promise<void> {
         return new Promise((resolve, reject) => {
             this.ws = new WebSocket(`wss://quote.edgex.exchange/api/v1/public/ws`, {
                 agent: this.proxyAgent,
-            });
+            }); 
 
-            this.ws.on('open', () => {
-                console.log(`[${this.name}] WebSocket connected`);
+        // 把回调改为 async，便于 await this.sleep(...)
+        this.ws.on('open', async () => {
+            console.log(`[${this.name}] WebSocket connected`);
 
-                // 订阅全市场 ticker
-                this.ws?.send(JSON.stringify({
+            // 订阅全市场 ticker（仅在 OPEN 时发）
+            if (this.ws && this.ws.readyState === this.ws.OPEN) {
+                this.ws.send(JSON.stringify({
                     type: 'subscribe',
                     channel: 'ticker.all'
                 }));
+            }
 
-                // 为所有合约订阅 depth.15
-                for (const contractId of Object.keys(this.contracts)) {
-                    this.ws?.send(JSON.stringify({
+            // 准备合约ID列表：如果 this.contracts 是数组，则取 c.id
+            const ids: string[] = Array.isArray(this.contracts)
+                ? this.contracts.map(c => c.id)
+                : Object.keys(this.contracts);
+
+            // 分批发送：每批 10 个，批间隔 100ms（不引入额外常量）
+            for (let i = 0; i < ids.length; i += 10) {
+                if (!this.ws || this.ws.readyState !== this.ws.OPEN) break;
+
+                const batch = ids.slice(i, i + 10);
+                for (const contractId of batch) {
+                    if (!this.ws || this.ws.readyState !== this.ws.OPEN) break;
+                    this.ws.send(JSON.stringify({
                         type: 'subscribe',
                         channel: `depth.${contractId}.15`
                     }));
                 }
 
-                resolve();
-            });
-
-            this.ws.on('message', (raw: string) => {
-                const msg = JSON.parse(raw);
-
-                if (msg.type === 'ping') {
-                    // 必须回复 pong，否则服务器会断开连接
-                    if (this.ws) {
-                        this.ws.send(JSON.stringify({ type: 'pong', time: msg.time }));
-                    }
-                    return; // 直接返回，不继续往下走
+                // 如果还有下一批，就等待 200ms
+                if (i + 10 < ids.length) {
+                    await this.sleep(100);
                 }
+            }
 
-                if (msg.type === 'quote-event' && msg.channel?.startsWith('ticker.')) {
-                    this.handleTickerUpdate(msg);
-                } else if (msg.type === 'quote-event' && msg.channel?.startsWith('depth.')) {
-                    this.handleDepthUpdate(msg);
+            // 所有订阅发送完毕后，解析 tickers 数据
+            resolve();
+    });
+
+        this.ws.on('message', (raw: string) => {
+        const msg = JSON.parse(raw);
+
+            if (msg.type === 'ping') {
+                if (this.ws && this.ws.readyState === this.ws.OPEN) {
+                    this.ws.send(JSON.stringify({ type: 'pong', time: msg.time }));
                 }
-            });
-            // @ts-ignore
-            this.ws.on('error', (err) => {
-                console.error(`[${this.name}] WS error:`, err);
-                reject(err);
-            });
+                return;
+            }
 
-            this.ws.on('close', () => {
-                console.log(`[${this.name}] WebSocket closed`);
-            });
+            if (msg.type === 'quote-event' && msg.channel?.startsWith('ticker.')) {
+                this.handleTickerUpdate(msg);
+            } else if (msg.type === 'quote-event' && msg.channel?.startsWith('depth.')) {
+                this.handleDepthUpdate(msg);
+            }
         });
-    }
+
+        // @ts-ignore
+        this.ws.on('error', (err) => {
+            console.error(`[${this.name}] WS error:`, err);
+            reject(err);
+        });
+
+        this.ws.on('close', () => {
+            console.log(`[${this.name}] WebSocket closed`);
+        });
+    });
+}
+
+    
 
     private handleTickerUpdate(msg: any) {
         const dataArr = msg.content?.data;
@@ -322,11 +344,12 @@ export class EdgexExchange {
             const contractId = snapshot.contractId;
             const symbol = this.contractIdToSymbol[contractId] || contractId;
 
-            const bids = snapshot.bids || [];
-            const asks = snapshot.asks || [];
+            const bids = Array.isArray(snapshot.bids) ? snapshot.bids : [];
+            const asks = Array.isArray(snapshot.asks) ? snapshot.asks : [];
 
-            const bestBid = bids.length > 0 ? [parseFloat(bids[0][0]), parseFloat(bids[0][1])] : [undefined, undefined];
-            const bestAsk = asks.length > 0 ? [parseFloat(asks[0][0]), parseFloat(asks[0][1])] : [undefined, undefined];
+            const bestBid = bids.length > 0 ? [Number(bids[0][0] ?? 0), Number(bids[0][1] ?? 0)] : [undefined, undefined];
+            const bestAsk = asks.length > 0 ? [Number(asks[0][0] ?? 0), Number(asks[0][1] ?? 0)] : [undefined, undefined];
+
 
             const spread = (bestBid[0] !== undefined && bestAsk[0] !== undefined)
                 ? bestAsk[0] - bestBid[0]
@@ -359,52 +382,67 @@ export class EdgexExchange {
     async fetchFundingInfo() {
         const url = `${this.baseUrl}/api/v1/public/funding/getLatestFundingRate`;
 
+        const ids = Object.keys(this.contracts || {}); // 从 loadMarkets 来的 contractId 列表
+
+        if (ids.length === 0) {
+            logger.exchangeInfo(this.name, 'No contracts loaded, skip fetchFundingInfo');
+            return;
+        }
+
         try {
-            const resp = await this.requestWithRetry(() =>
-                axios.get<{ data: any[] }>(url, {
-                    httpsAgent: this.proxyAgent,
-                    timeout: this.requestTimeout,
-                }),
-                'FUNDING'
-            );
-            // @ts-ignore
-            const list = resp.data?.data;
-            if (!Array.isArray(list)) {
-                throw new Error('Invalid funding data from Edgex');
-            }
-
             let updated = 0;
-            for (const item of list) {
-                if (!item?.contractId) continue;
 
-                const contractId = String(item.contractId);
-                const symbol = this.contractIdToSymbol[contractId];
-                if (!symbol) continue;
+            for (const contractId of ids) {   // 循环取 contractId
+                const resp = await this.requestWithRetry(() =>
+                    axios.get<{ data: any[] }>(url, {
+                        httpsAgent: this.proxyAgent,
+                        timeout: this.requestTimeout,
+                        params: { 
+                            contractId: ids.join(",")
+                         },   //  批量传递循环里的 contractId
+                    }),
+                    'FUNDING'
+                );
 
-                const fundingInfo: FundingInfo = {
-                    symbol,
-                    fundingRate: item.fundingRate != null ? Number(item.fundingRate) : null,
-                    fundingTime: item.fundingTime != null ? Number(item.fundingTime) : null,
-                    forecastFundingRate: item.forecastFundingRate != null ? Number(item.forecastFundingRate) : null,
-                    fundingRateIntervalMin: item.fundingRateIntervalMin != null ? Number(item.fundingRateIntervalMin) : null,
-                };
 
-                this.fundingMap[symbol] = fundingInfo;
-                updated++;
+                const list = resp.data?.data;
+                if (!Array.isArray(list) || list.length === 0) {
+                    logger.exchangeInfo(this.name, `No funding data for contract ${contractId}`);
+                    continue;
+                }
+
+                for (const item of list) {
+                    if (!item?.contractId) continue;
+
+                    const cid = String(item.contractId);
+                    const symbol = this.contractIdToSymbol[cid];
+                    if (!symbol) continue;
+
+                    const fundingInfo: FundingInfo = {
+                        symbol,
+                        fundingRate: item.fundingRate != null ? Number(item.fundingRate) : null,
+                        fundingTime: item.fundingTime != null ? Number(item.fundingTime) : null,
+                        forecastFundingRate: item.forecastFundingRate != null ? Number(item.forecastFundingRate) : null,
+                        fundingRateIntervalMin: item.fundingRateIntervalMin != null ? Number(item.fundingRateIntervalMin) : null,
+                    };
+
+                    this.fundingMap[symbol] = fundingInfo;
+                    updated++;
+                }
             }
 
             if (config.logging.enableFundingLogs) {
                 logger.exchangeInfo(this.name, `Fetched ${updated} funding rates`);
             }
         } catch (e: any) {
-            // @ts-ignore
             logger.exchangeError(this.name, 'FUNDING', 'fetchFundingRates failed', {
                 error: e.message,
             });
             throw e;
-        }
+        }       
     }
 
+        
 
     getFundingMap() {
         return this.fundingMap;
@@ -416,6 +454,5 @@ export class EdgexExchange {
     }
 
 }
-
 
 
