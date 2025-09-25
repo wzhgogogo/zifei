@@ -77,7 +77,7 @@ const binanceExchange = new BinanceExchange();
 const okxExchange = new OKXExchange();
 const bybitExchange = new BybitExchange();
 const backpackExchange = new BackpackExchange();
-const edgexExchange = new EdgexExchange.EdgexExchange(); // 新增
+const edgexExchange = new EdgexExchange.default(); // 新增
 const hyperliquidExchange = new HyperliquidExchange(); // 新增
 
 // 增加：聚合互斥锁，防止主循环重入

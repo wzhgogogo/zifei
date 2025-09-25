@@ -136,6 +136,7 @@ export default class EdgexExchange {
 
         // 请求元数据（合约列表 + 币种列表）
         const resp = await axios.get<{ data: { contractList: any[]; coinList?: any[] } }>(url, {
+            //@ts-ignore
             httpsAgent: this.proxyAgent,
             timeout: this.requestTimeout,
         });
@@ -244,78 +245,78 @@ export default class EdgexExchange {
         return new Promise((resolve, reject) => {
             this.ws = new WebSocket(`wss://quote.edgex.exchange/api/v1/public/ws`, {
                 agent: this.proxyAgent,
-            }); 
+            });
 
-        // 把回调改为 async，便于 await this.sleep(...)
-        this.ws.on('open', async () => {
-            console.log(`[${this.name}] WebSocket connected`);
+            // 把回调改为 async，便于 await this.sleep(...)
+            this.ws.on('open', async () => {
+                console.log(`[${this.name}] WebSocket connected`);
 
-            // 订阅全市场 ticker（仅在 OPEN 时发）
-            if (this.ws && this.ws.readyState === this.ws.OPEN) {
-                this.ws.send(JSON.stringify({
-                    type: 'subscribe',
-                    channel: 'ticker.all'
-                }));
-            }
-
-            // 准备合约ID列表：如果 this.contracts 是数组，则取 c.id
-            const ids: string[] = Array.isArray(this.contracts)
-                ? this.contracts.map(c => c.id)
-                : Object.keys(this.contracts);
-
-            // 分批发送：每批 10 个，批间隔 100ms（不引入额外常量）
-            for (let i = 0; i < ids.length; i += 10) {
-                if (!this.ws || this.ws.readyState !== this.ws.OPEN) break;
-
-                const batch = ids.slice(i, i + 10);
-                for (const contractId of batch) {
-                    if (!this.ws || this.ws.readyState !== this.ws.OPEN) break;
+                // 订阅全市场 ticker（仅在 OPEN 时发）
+                if (this.ws && this.ws.readyState === this.ws.OPEN) {
                     this.ws.send(JSON.stringify({
                         type: 'subscribe',
-                        channel: `depth.${contractId}.15`
+                        channel: 'ticker.all'
                     }));
                 }
 
-                // 如果还有下一批，就等待 200ms
-                if (i + 10 < ids.length) {
-                    await this.sleep(100);
+                // 准备合约ID列表：如果 this.contracts 是数组，则取 c.id
+                const ids: string[] = Array.isArray(this.contracts)
+                    ? this.contracts.map(c => c.id)
+                    : Object.keys(this.contracts);
+
+                // 分批发送：每批 10 个，批间隔 100ms（不引入额外常量）
+                for (let i = 0; i < ids.length; i += 10) {
+                    if (!this.ws || this.ws.readyState !== this.ws.OPEN) break;
+
+                    const batch = ids.slice(i, i + 10);
+                    for (const contractId of batch) {
+                        if (!this.ws || this.ws.readyState !== this.ws.OPEN) break;
+                        this.ws.send(JSON.stringify({
+                            type: 'subscribe',
+                            channel: `depth.${contractId}.15`
+                        }));
+                    }
+
+                    // 如果还有下一批，就等待 200ms
+                    if (i + 10 < ids.length) {
+                        await this.sleep(100);
+                    }
                 }
-            }
 
-            // 所有订阅发送完毕后，解析 tickers 数据
-            resolve();
-    });
+                // 所有订阅发送完毕后，解析 tickers 数据
+                resolve();
+            });
 
-        this.ws.on('message', (raw: string) => {
-        const msg = JSON.parse(raw);
+            this.ws.on('message', (raw: string) => {
+                const msg = JSON.parse(raw);
 
-            if (msg.type === 'ping') {
-                if (this.ws && this.ws.readyState === this.ws.OPEN) {
-                    this.ws.send(JSON.stringify({ type: 'pong', time: msg.time }));
+                if (msg.type === 'ping') {
+                    if (this.ws && this.ws.readyState === this.ws.OPEN) {
+                        this.ws.send(JSON.stringify({ type: 'pong', time: msg.time }));
+                    }
+                    return;
                 }
-                return;
-            }
 
-            if (msg.type === 'quote-event' && msg.channel?.startsWith('ticker.')) {
-                this.handleTickerUpdate(msg);
-            } else if (msg.type === 'quote-event' && msg.channel?.startsWith('depth.')) {
-                this.handleDepthUpdate(msg);
-            }
+                if (msg.type === 'quote-event' && msg.channel?.startsWith('ticker.')) {
+                    this.handleTickerUpdate(msg);
+                } else if (msg.type === 'quote-event' && msg.channel?.startsWith('depth.')) {
+                    this.handleDepthUpdate(msg);
+                }
+            });
+
+            // @ts-ignore
+            this.ws.on('error', (err) => {
+                console.error(`[${this.name}] WS error:`, err);
+                reject(err);
+            });
+
+            this.ws.on('close', () => {
+                console.log(`[${this.name}] WebSocket closed`);
+            });
         });
+    }
 
-        // @ts-ignore
-        this.ws.on('error', (err) => {
-            console.error(`[${this.name}] WS error:`, err);
-            reject(err);
-        });
 
-        this.ws.on('close', () => {
-            console.log(`[${this.name}] WebSocket closed`);
-        });
-    });
-}
-
-    
 
     private handleTickerUpdate(msg: any) {
         const dataArr = msg.content?.data;
@@ -391,17 +392,19 @@ export default class EdgexExchange {
 
         try {
             const resp = await this.requestWithRetry(() =>
+                //@ts-ignore
                 axios.get<{ data: any[] }>(url, {
+                    //@ts-ignore
                     httpsAgent: this.proxyAgent,
                     timeout: this.requestTimeout,
-                    params: { 
+                    params: {
                         contractId: ids.join(",")
-                        },   
+                    },
                 }),
                 'FUNDING'
             );
 
-
+            //@ts-ignore
             const list = resp.data?.data;
             if (!Array.isArray(list) || list.length === 0) {
                 logger.exchangeInfo(this.name, `No funding data for contract ${ids.join(',')}`);
@@ -431,10 +434,10 @@ export default class EdgexExchange {
                 error: e.message,
             });
             throw e;
-        }       
+        }
     }
 
-        
+
 
     getFundingMap() {
         return this.fundingMap;
